@@ -31,15 +31,22 @@ router.post('/quote', async (req, res, next) => {
 
   const result = newSentenceSchema.safeParse(req.body)
 
-  if(result.success){
-    const { newSentence } = result.data
-    sentences.push(newSentence)
-    writeSentences(sentences)
-    res.json({
-      allSentences: sentences
-    })
-  } else {
-    return res.status(400).json({error: 'Please send "newSentence" at the body of your request'})
+  try {
+    if(result.success){
+      const { newSentence } = result.data
+      const addNewSentence = await prisma.sentence.create({
+        data:{
+          text: newSentence
+        }
+      })
+      res.json({
+        newSentence: addNewSentence
+      })
+    } else {
+      return res.status(400).json({error: 'Please send "newSentence" at the body of your request'})
+    }
+  } catch (error) {
+    next(error)
   }
 })
 
