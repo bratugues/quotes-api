@@ -1,6 +1,7 @@
 import express from 'express'
 import { z } from 'zod'
 import { loadSentences, writeSentences } from '../services/sentencesService.js'
+import { prisma } from '../prismaClient.js'
 
 export const router = express.Router()
 
@@ -15,13 +16,15 @@ router.get('/quote', async (req, res) => {
   res.json({sentence: randomQuote})
 })
 
-router.get('/all', (req, res) => {
+router.get('/all', async (req, res, next) => {
+  const all = await prisma.sentence.findMany()
+
   res.json({
-    allSentences: sentences
+    allSentences: all
   })
 })
 
-router.post('/quote', (req, res) => {
+router.post('/quote', async (req, res, next) => {
   const newSentenceSchema = z.object({
     newSentence: z.string()
   })
