@@ -82,28 +82,31 @@ router.get('/random', (req, res) => {
   }
 })
 
-router.delete('/quote', (req, res) => {
+router.delete('/quote', async (req, res, next) => {
   const deleteSchema = z.object({
-    text: z.string().trim().nonempty()
+    id: z.coerce.number().int().positive()
   })
 
   const result = deleteSchema.safeParse(req.query)
 
   if (result.success){
-    const { text } = result.data
-
-    const index = sentences.indexOf(text)
-
-    if (index > -1){
-      sentences.splice(index, 1)
-      writeSentences(sentences)
-      return res.json({success: "Sentence removed successfully!"})
-    } else {
-      return res.status(404).json({error: "Sentence not found"})
+    const { id, text } = result.data
+    try {
+      await prisma.sentence.delete({
+        where: {
+          id: id
+        }
+      })
+      return res.json({success: `Sentence with id ${id} was removed successfully!`})
+    } catch (error) {
+      if (error.code === 'P2025'){
+        return res.status(404).json({error: "Sentence with this id was not found."})
+      } else {
+        next(error)
+      }
     }
-
   } else {
-    return res.status(400).json({error: "Please send an existing and valid sentence!"})
+    return res.status(400).json({error: "Please provide a valid numeric 'id' query parameter."})
   }
 })
 
