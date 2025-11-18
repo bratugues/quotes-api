@@ -110,26 +110,34 @@ router.delete('/quote', async (req, res, next) => {
   }
 })
 
-router.put('/quote', (req, res) => {
+router.put('/quote', async (req, res, next) => {
   const schema = z.object({
-    oldSentence: z.string().trim().nonempty(),
+    id: z.coerce.number().int().positive(),
     newSentence: z.string().trim().nonempty(),
   })
 
   const result = schema.safeParse(req.body)
 
   if(result.success){
-    const { oldSentence, newSentence } = result.data
+    const { id, newSentence } = result.data
 
-    const index = sentences.indexOf(oldSentence)
-
-    if (index === -1){
-      return res.status(404).json({error: "Sentence not found"})
+    try {
+      await prisma.sentence.update({
+        where: {
+          id: id
+        },
+        data: {
+          text: newSentence
+        }
+      })
+      return res.json({success: `Sentence with id ${id} was updated successfully to ${newSentence}`})
+    } catch (error) {
+      if (error.code === 'P2025'){
+        return res.status(404).json({error: "Sentence with this id was not found."})
+      } else {
+        next(error)
+      }
     }
-
-    sentences.splice(index, 1, newSentence)
-    writeSentences(sentences)
-    return res.json({success: `Sentence: ${oldSentence} was updated successfully to ${newSentence}`})
   } else {
     return res.status(400).json({error: "Please include the sentence you want to update, and the updated sentence"})
   }
