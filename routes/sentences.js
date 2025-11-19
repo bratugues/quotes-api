@@ -1,6 +1,6 @@
 import express from 'express'
 import { z } from 'zod'
-import { loadSentences, writeSentences } from '../services/sentencesService.js'
+import { loadSentences, writeSentences, detectLanguage } from '../services/sentencesService.js'
 import { prisma } from '../prismaClient.js'
 
 export const router = express.Router()
@@ -50,35 +50,50 @@ router.post('/quote', async (req, res, next) => {
   }
 })
 
-router.get('/search', (req, res) => {
+router.get('/search', async (req, res, next) => {
   const textSchema = z.object({
     text: z.string().trim().nonempty()
   })
 
   const textResult = textSchema.safeParse(req.query)
-
-  if (textResult.success) {
-    const { text } = textResult.data
-    const filtrado = sentences.filter(sentence => sentence.toLowerCase().includes(text.toLowerCase()))
-    res.json({sentences: filtrado})
-  } else {
-    res.status(400).json({error: "You must provide a ?text query parameter"})
-  }
+    if (textResult.success) {
+      try {
+        const { text } = textResult.data
+        const filtrado = await prisma.sentence.findMany({where: {text: {contains: text}}})
+        res.json({total: filtrado.length, sentences: filtrado})
+      } catch (error) {
+        next(error)
+      }
+    } else {
+      res.status(400).json({error: "You must provide a ?text query parameter"})
+    }
 })
 
-router.get('/random', (req, res) => {
+router.get('/random', async (req, res, next) => {
   const schema = z.object({
-    count: z.coerce.number().min(1).int().lte(sentences.length)
+    count: z.coerce.number().min(1).int()
   })
 
   const result = schema.safeParse(req.query)
 
   if (result.success){
-    const { count } = result.data
-    const randomSentences = [...sentences].sort(() => Math.random() - 0.5)
-    res.json({sentences: randomSentences.slice(0, count)})
+    try {
+      const { count } = result.data
+      const sentences = await prisma.sentence.findMany()
+      if (sentences.length === 0){
+        return res.json({sentences: sentences})
+      } else if (sentences.length < count) {
+        return res.status(400).json({error: `Count must be between 1 and ${sentences.length}`})
+      }
+
+      const shuffled = [...sentences].sort(() => Math.random() - 0.5)
+      const selectedSentences = shuffled.slice(0, count)
+      res.json({count: count, sentences: selectedSentences})
+    } catch (error) {
+      next(error)
+    }
   } else{
-    res.status(400).json({error: `You must provide a valid numeric 'count' query parameter between 1 and ${sentences.length}`})
+    res.status(400).json({error: "You must provide a valid numeric 'count' query parameter (min 1)"})
   }
 })
 
@@ -143,7 +158,7 @@ router.put('/quote', async (req, res, next) => {
   }
 })
 
-router.get('/random-by-lang', (req, res) => {
+router.get('/random-by-lang', async (req, res, next) => {
   const langSchema = z.object({
     lang: z.enum(['pt', 'en', 'zh'])
   })
@@ -151,30 +166,26 @@ router.get('/random-by-lang', (req, res) => {
   const result = langSchema.safeParse(req.query)
 
   if(result.success){
-    const { lang } = result.data
-    const detectLanguage = (sentence) => {
-      if(/[\u4e00-\u9fff]/.test(sentence)){
-        return 'zh'
-    } else if (/[áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ]/.test(sentence)){
-      return 'pt'
-    } else {
-      return 'en'
+    try {
+      const { lang } = result.data
+      const sentences = await prisma.sentence.findMany()
+
+      const filtered = sentences.filter((sentence) => {
+        return detectLanguage(sentence.text) === lang
+    })
+
+      if(filtered.length === 0) {
+        return res.status(404).json({error: "No sentences found for this language."})
+      }
+
+      const randomIndex = Math.floor(Math.random() * filtered.length)
+      const selectedSentence = filtered[randomIndex]
+
+      return res.json({lang: lang, sentence: selectedSentence, total: filtered.length})
+
+    } catch (error) {
+      next(error)
     }
-  }
-
-  const filtered = sentences.filter((sentence) => {
-    return detectLanguage(sentence) === lang
-  })
-
-  if(filtered.length === 0) {
-    return res.status(404).json({error: "No sentences found..."})
-  }
-
-  const randomIndex = Math.floor(Math.random() * filtered.length)
-  const selectedSentence = filtered[randomIndex]
-
-  return res.json({lang: `${lang}`, sentence: `${selectedSentence}`, total: `${filtered.length}`})
-
   } else {
     return res.status(400).json({error: "Please type a valid language (pt, en, or zh)"})
   }
