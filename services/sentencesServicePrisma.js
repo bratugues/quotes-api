@@ -71,7 +71,7 @@ export const getPaginatedSentences = async (page, limit) => {
   const lastPage = Math.ceil(total / limit)
 
   if (lastPage < page) {
-    return []
+    return {sentences: [], page, limit, total, lastPage}
   }
 
   return {sentences: currentPage, page, limit, total, lastPage}
