@@ -62,3 +62,18 @@ export const getRandomSentenceByLang = async (lang) => {
     const selectedSentence = filtered[randomIndex]
     return {sentence: selectedSentence, total: filtered.length}
 }
+
+export const getPaginatedSentences = async (page, limit) => {
+  const total = await prisma.sentence.count()
+  const skip = (page - 1) * limit
+  const take = limit
+  const currentPage = await prisma.sentence.findMany({skip: skip, take: take, orderBy: { id: 'asc'}})
+  const lastPage = Math.ceil(total / limit)
+
+  if (lastPage < page) {
+    return []
+  }
+
+  return {sentences: currentPage, page, limit, total, lastPage}
+
+}

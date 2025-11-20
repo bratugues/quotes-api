@@ -2,7 +2,7 @@ import express from 'express'
 import { z } from 'zod'
 import { detectLanguage } from '../utils/detectLanguage.js'
 import { prisma } from '../prismaClient.js'
-import { createSentence, deleteSentence, getAllSentences, getRandomSentenceByLang, getRandomSentences, searchSentences, updateSentence } from '../services/sentencesServicePrisma.js'
+import { createSentence, deleteSentence, getAllSentences, getPaginatedSentences, getRandomSentenceByLang, getRandomSentences, searchSentences, updateSentence } from '../services/sentencesServicePrisma.js'
 
 export const router = express.Router()
 
@@ -15,10 +15,22 @@ router.get('/quote', async (req, res) => {
 })
 
 router.get('/all', async (req, res, next) => {
-  const all = await getAllSentences()
-  res.json({
-    allSentences: all
+  const pageSchema = z.object({
+    page: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().positive().max(50).optional()
   })
+
+  const result = pageSchema.safeParse(req.query)
+
+  if(result.success){
+    const page = result.data.page ?? 1
+    const limit = result.data.limit ?? 10
+
+    const pagination = await getPaginatedSentences(page, limit)
+    return res.json(pagination)
+  } else {
+    return res.status(400).json({error: "Page number not valid"})
+  }
 })
 
 router.post('/quote', async (req, res, next) => {
